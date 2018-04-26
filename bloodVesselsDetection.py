@@ -1,25 +1,33 @@
-from skimage import io, feature, measure
+from skimage import io, feature, measure, morphology
 from matplotlib import pyplot as plt
 import numpy as np
 from math import *
-from scipy import ndimage
 import cv2
 from skimage.draw import circle
 from skimage.filters import frangi
+from sklearn.metrics import confusion_matrix
 
-def cutCircle(image):
-    img = np.zeros_like(image)
-    h, w = image.shape
-    r = min(h, w) / 2
-    center = h / 2 - 1, w / 2 - 1
-    rr, cc = circle(center[0], center[1], r)
-    img[rr, cc] = 1
-    return img
-
+def compareMatrixes(expert, algorithm):
+    '''
+            \ Algorithm
+     Expert  \   1  0
+              \_________
+            1 |  a||b       TP||FN
+              |--------     ------
+            0 |  c||d       FP||TN
+    '''
+    expert1d = expert.ravel()
+    algorithm1d = algorithm.ravel()
+    tn, fp, fn, tp = confusion_matrix(expert1d, algorithm1d).ravel()
+    #print(tn, fp, fn, tp)
+    sensitivity = tp / (tp + fn)
+    specificity = fn / (fp + tn)
+    accuracy = (tp + tn) / (tp + fn + fp + tn)
+    print("Sensitivity = ", sensitivity, "Specificity = ", specificity, "Accuracy = ", accuracy)
 
 def main():
-    fileName = "myPhoto.jpg"
-    catalogName = "CHASEDB1"
+    fileName = "08_h.jpg"
+    catalogName = "healthy"
     image = io.imread(catalogName + "/" + fileName)
     plt.subplot(221)
     io.imshow(image)
@@ -30,35 +38,43 @@ def main():
 
     outputImage = cv2.imread(catalogName + "/" + fileName)
     outputImage = cv2.cvtColor(outputImage, cv2.COLOR_BGR2GRAY)
-    outputImage = cv2.Canny(outputImage, 150, 255, apertureSize=5)
-    myMask = np.zeros((3, 3), np.uint8)
-    myMask[1,:] = 1
-    myMask[:,1] = 1
-    outputImage = cv2.dilate(outputImage, myMask, iterations=3)
-    outputImage = cv2.medianBlur(outputImage, 3)
-    outputImage = cv2.erode(outputImage, myMask, iterations=3)
+    outputImage = cv2.adaptiveThreshold(outputImage, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 33, 2)
 
-    #outputImage = cv2.adaptiveThreshold(outputImage, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
-    #outputImage = cv2.erode(outputImage, np.ones((3,3), np.uint8), iterations=3)
+    myMask = np.zeros((3, 3), np.uint8)
+    myMask[1, :] = 1
+    myMask[:, 1] = 1
+
+    #outputImage = cv2.medianBlur(outputImage, 9)
+    outputImage = morphology.dilation(outputImage)
+    outputImage = morphology.dilation(outputImage)
+    outputImage = morphology.erosion(outputImage)
+    outputImage = morphology.erosion(outputImage)
+    outputImage = cv2.medianBlur(outputImage, 11)
+    outputImage = cv2.medianBlur(outputImage, 11)
+    outputImage = cv2.medianBlur(outputImage, 11)
     #outputImage = cv2.medianBlur(outputImage, 5)
-    #outputImage = cv2.Canny(outputImage,)
+    outputImage = cv2.bitwise_not(outputImage)
     plt.subplot(223)
     io.imshow(outputImage)
-    outputImage = frangi(outputImage, black_ridges=True)
+
+
+    expertImage = cv2.imread("healthy_manualsegm/08_h.tif")
+    expertImage = cv2.cvtColor(expertImage, cv2.COLOR_BGR2GRAY)
     plt.subplot(224)
+    io.imshow(expertImage)
+
+    compareMatrixes(expertImage, outputImage)
 
     '''
-    for y in range(outputImage.shape[0]):
-        for x in range(outputImage.shape[1]):
-            if (outputImage[y][x] != 0):
-                outputImage[y][x] = 1
-    '''
-    #io.imshow(outputImage, cmap=plt.get_cmap('gray'))
-    io.imshow(outputImage)
-    #outputImage = feature.canny(outputImage, sigma=0.5)
+    outputImage = cv2.medianBlur(outputImage, 11)
+    outputImage = frangi(outputImage, 30, 200,black_ridges=True)
+    outputImage = cv2.Canny(outputImage, threshold1=150, threshold2=255, apertureSize=7, L2gradient=True)
 
-    #contours = measure.find_contours(outputImage, 0.3)
     
+    outputImage = cv2.dilate(outputImage, myMask, iterations=3)
+    outputImage = cv2.erode(outputImage, myMask, iterations=3)
+    outputImage = cv2.adaptiveThreshold(outputImage, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+    '''
     plt.show()
 
 if __name__ == '__main__':
