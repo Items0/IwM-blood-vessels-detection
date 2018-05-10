@@ -9,6 +9,14 @@ from sklearn.metrics import confusion_matrix
 import pandas as pd
 import random
 from sklearn.neighbors import KNeighborsClassifier
+import sys
+
+def removeFrame(image, mask):
+    for y in range(mask.shape[0]):
+        for x in range(mask.shape[1]):
+            if mask[y][x] == 0:
+                image[y][x] = 0
+    return image
 
 def compareMatrixes(expert, algorithm):
     '''
@@ -24,7 +32,7 @@ def compareMatrixes(expert, algorithm):
     tn, fp, fn, tp = confusion_matrix(expert1d, algorithm1d).ravel()
     #print(tn, fp, fn, tp)
     sensitivity = tp / (tp + fn)
-    specificity = fn / (fp + tn)
+    specificity = tn / (fp + tn)
     accuracy = (tp + tn) / (tp + fn + fp + tn)
     print("Sensitivity = ", sensitivity, "Specificity = ", specificity, "Accuracy = ", accuracy)
 
@@ -33,33 +41,35 @@ def createDataset(originalImage, expertImage, k):
     Y = []
     black = 0
     white = 0
-    flag = True
     h, w = expertImage.shape
-    for i in range(0, h):
-        xPos = random.randrange(k, w-k)
-        yPos = random.randrange(k, h-k)
-        decision = expertImage[yPos][xPos]
+    for i in range(0, 8000):
+        while True:
+            xPos = random.randrange(k, w - k)
+            yPos = random.randrange(k, h - k)
+            decision = expertImage[yPos][xPos]
+            if decision == 255 * (i % 2):
+                break
 
-        if decision > 0 and abs(black - white) < 1:
+        if decision > 0:
             white += 1
-            flag = True
         else:
-            flag = False
-
-        if decision == 0 and abs(black - white) < 1:
             black += 1
-            flag = True
-        else:
-            flag = False
 
-        if flag:
-            r = k//2
-            square = originalImage[yPos - r: yPos + r + 1, xPos - r : xPos + r + 1]
-            avg = np.average(square)
-            median = np.median(square)
-            variance = np.var(square)
-            X.append([avg, median, variance])
-            Y.append(decision)
+        r = k // 2
+        square = originalImage[yPos - r: yPos + r + 1, xPos - r : xPos + r + 1]
+        avg = np.average(square)
+        median = np.median(square)
+        variance = np.var(square)
+        X.append([avg, median, variance])
+        Y.append(decision)
+        if (i % 100):
+            print(i, "/", 8000)
+    while (Y.count(0) < len(Y) * 65 / 100):
+        index = Y.index(255)
+        Y.pop(index)
+        X.pop(index)
+        white -= 1
+        print("white = ", white)
 
     #print("avg = ", avg, "median = ", median, "variance = ", variance)
     #print(square)
@@ -73,9 +83,9 @@ def knn(originalImage, expertImage):
     classifier = KNeighborsClassifier(n_neighbors=5)
     classifier.fit(X, Y)
     r = 5 // 2
-    for y in range(r + (3 *(originalImage.shape[0] - r)) // 5, 4 * (originalImage.shape[0] - r) // 5):
-        for x in range(r + 2 * (originalImage.shape[1] - r) // 5, 4 * (originalImage.shape[1] - r) // 5):
-            #print(y, x)
+    divideParts = 5
+    for y in range(r + (3 *(originalImage.shape[0] - r)) // divideParts, 4 * (originalImage.shape[0] - r) // divideParts):
+        for x in range(r + 2 * (originalImage.shape[1] - r) // divideParts, 4 * (originalImage.shape[1] - r) // divideParts):
             square = originalImage[y - r: y + r + 1, x - r : x + r + 1]
             avg = np.average(square)
             median = np.median(square)
@@ -85,8 +95,14 @@ def knn(originalImage, expertImage):
     plt.subplot(223)
     io.imshow(originalOutput)
 
+    originalOutput = morphology.erosion(originalOutput)
+    plt.subplot(224)
+    io.imshow(originalOutput)
+
+    return originalOutput
+
 def main():
-    fileName = "03_h.jpg"
+    fileName = "08_h.jpg"
     catalogName = "healthy"
     image = io.imread(catalogName + "/" + fileName)
     plt.subplot(221)
@@ -95,23 +111,7 @@ def main():
     outputImage = image[:, :, 1] #green channel
     plt.subplot(222)
     io.imshow(outputImage)
-    '''image = filters.frangi(outputImage)
-#    outputImage = cv2.imread(catalogName + "/" + fileName)
-#    outputImage = cv2.cvtColor(outputImage, cv2.COLOR_BGR2GRAY)
-#    outputImage = cv2.adaptiveThreshold(outputImage, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 33, 2)
-
-
-    #outputImage = cv2.medianBlur(outputImage, 9)
-     
-    outputImage = morphology.dilation(outputImage)
-    outputImage = morphology.dilation(outputImage)
-    outputImage = morphology.erosion(outputImage)
-    outputImage = morphology.erosion(outputImage)
-    outputImage = cv2.medianBlur(outputImage, 11)
-    outputImage = cv2.medianBlur(outputImage, 11)
-    outputImage = cv2.medianBlur(outputImage, 11)
-    #outputImage = cv2.medianBlur(outputImage, 5)
-    outputImage = cv2.bitwise_not(outputImage)
+    image = filters.frangi(outputImage)
 
     image2 = np.zeros_like(image)
     temp = np.zeros_like(image[0])
@@ -119,7 +119,7 @@ def main():
     for val in image:
         j = 0
         for x in val:
-            if x > 0.0000001:
+            if x > 0.0000002:
                 temp[j] = 255
             else:
                 temp[j] = 0
@@ -128,33 +128,31 @@ def main():
         i += 1
         temp = np.zeros_like(image[0])
 
-    outputImage=image2
-    plt.subplot(223)
-    io.imshow(outputImage,cmap='gray')
+    outputImage = image2
+    fileNameMask = "06_h_mask.tif"
+    emptyMask = io.imread("healthy_fovmask" + "/" + fileNameMask)
+    emptyMask = cv2.cvtColor(emptyMask, cv2.COLOR_BGR2GRAY)
+    outputImage = removeFrame(outputImage, emptyMask)
+    #plt.subplot(223)
+    #io.imshow(outputImage, cmap='gray')
 
-'''
-
-    expertImage = cv2.imread("healthy_manualsegm/03_h.tif")
+    expertImage = cv2.imread("healthy_manualsegm/08_h.tif")
     expertImage = cv2.cvtColor(expertImage, cv2.COLOR_BGR2GRAY)
-    '''plt.subplot(224)
-    io.imshow(expertImage)
-    plt.show()
+    #plt.subplot(222)
+    #io.imshow(expertImage)
+    #plt.show()
     compareMatrixes(expertImage, outputImage)
-'''
-    knn(originalImage, expertImage)
 
+    r = 5 // 2
+    divideParts = 5
+    squareExpertImage = expertImage[r + (3 * (originalImage.shape[0] - r)) // divideParts : 4 * (originalImage.shape[0] - r) // divideParts,
+                        r + 2 * (originalImage.shape[1] - r) // divideParts :  4 * (originalImage.shape[1] - r) // divideParts]
+    knnImage = knn(originalImage, expertImage)
+    knnImage = knnImage[r + (3 * (originalImage.shape[0] - r)) // divideParts : 4 * (originalImage.shape[0] - r) // divideParts,
+                        r + 2 * (originalImage.shape[1] - r) // divideParts :  4 * (originalImage.shape[1] - r) // divideParts]
+    print(squareExpertImage.shape, knnImage.shape)
+    compareMatrixes(squareExpertImage, knnImage)
 
-
-    '''
-    outputImage = cv2.medianBlur(outputImage, 11)
-    outputImage = frangi(outputImage, 30, 200,black_ridges=True)
-    outputImage = cv2.Canny(outputImage, threshold1=150, threshold2=255, apertureSize=7, L2gradient=True)
-
-    
-    outputImage = cv2.dilate(outputImage, myMask, iterations=3)
-    outputImage = cv2.erode(outputImage, myMask, iterations=3)
-    outputImage = cv2.adaptiveThreshold(outputImage, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
-    '''
     plt.show()
 
 if __name__ == '__main__':
