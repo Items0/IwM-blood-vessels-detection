@@ -3,13 +3,11 @@ from matplotlib import pyplot as plt
 import numpy as np
 from math import *
 import cv2
-from skimage.draw import circle
 from skimage import filters
 from sklearn.metrics import confusion_matrix
-import pandas as pd
 import random
 from sklearn.neighbors import KNeighborsClassifier
-import sys
+
 
 def compareMatrixes(expert, algorithm):
     '''
@@ -77,8 +75,8 @@ def createDataset(originalImage, expertImage, k):
         X.append([avg, median, variance])
         Y.append(decision)
 
-        if (i % 100):
-            print(i, "/", 8000)
+        #if (i % 100):
+        #    print(i, "/", 8000)
     
     '''while (Y.count(0) < len(Y) * 65 / 100):
         index = Y.index(255)
@@ -92,11 +90,8 @@ def createDataset(originalImage, expertImage, k):
     #print("white = ", white, " black = ", black)
     return X, Y
 
-def knn(originalImage, expertImage):
-#def knn(learnImage, learnImageExpert, originalImage):
+def knn(originalImage, expertImage, X, Y):
     originalOutput = np.zeros_like(originalImage)
-    #names = ['avg', 'median', 'variance']
-    X, Y = createDataset(originalImage, expertImage, 5)
     classifier = KNeighborsClassifier(n_neighbors=5)
     classifier.fit(X, Y)
     r = 5 // 2
@@ -110,97 +105,81 @@ def knn(originalImage, expertImage):
             median = np.median(square)
             variance = np.var(square)
             originalOutput[y][x] = classifier.predict([[avg, median, variance]])
-        print(y, "/",  (originalImage.shape[0] - r))
-
-    #plt.subplot(235)
-    #io.imshow(originalOutput)
-
-
-    #plt.subplot(236)
-    #io.imshow(originalOutput)
-
+        if (y % 500 == 0):
+            print(y, "/",  (originalImage.shape[0] - r))
     return originalOutput
 
 def main():
-    example = 8
-
+    exampleTab = [6, 7, 9, 10]
     learnKTT = 8
 
-    fileName = "0" + str(example) + "_h.jpg"
     catalogName = "healthy"
-
-    fileNameMask = "0" + str(example) + "_h_mask.tif"
     catalogNameMask = "healthy_fovmask"
-
-    fileNameExpert = "0" + str(example) + "_h.tif"
     catalogNameExpert = "healthy_manualsegm"
+    learnFileName =  "0" + str(learnKTT) + "_h.jpg"
+    learnFileNameExpert = "0" + str(learnKTT) + "_h.tif"
 
-    #fileNameLearnKTT  =  "0" + str(learnKTT) + "_h.jpg"
-    #fileNameLearnKTTExpert = "0" + str(learnKTT) + "_h.tif"
+    learnImage = io.imread(catalogName + "/" + learnFileName)
+    learnImage = cv2.cvtColor(learnImage, cv2.COLOR_BGR2GRAY)
 
-    resultCatalog = "output"
+    learnExpert = cv2.imread(catalogNameExpert + "/" + learnFileNameExpert)
+    learnExpert = cv2.cvtColor(learnExpert, cv2.COLOR_BGR2GRAY)
 
-    image = io.imread(catalogName + "/" + fileName)
-    plt.imsave(resultCatalog + "/" + str(example) + "_Example.png", image)
-    plt.subplot(231)
-    io.imshow(image)
+    X, Y = createDataset(learnImage, learnExpert, 5)
 
-    #green channel
-    originalImage = image[:, :, 1]
-    plt.imsave(resultCatalog + "/" + str(example) + "_Green.png", originalImage, cmap='gray')
-    plt.subplot(232)
-    io.imshow(originalImage)
+    for example in exampleTab:
+        print(example, ":")
+        fileName = "0" + str(example) + "_h.jpg"
+        fileNameMask = "0" + str(example) + "_h_mask.tif"
+        fileNameExpert = "0" + str(example) + "_h.tif"
 
-    #frangiFilter
-    frangiImage = filters.frangi(originalImage)
-    for y in range(frangiImage.shape[0]):
-        for x in range(frangiImage.shape[1]):
-            if frangiImage[y][x] > 0.0000002:
-                frangiImage[y][x] = 255
-            else:
-                frangiImage[y][x] = 0
-    outputImage = frangiImage
+        resultCatalog = "outputLAST"
 
-    #cut frame
-    emptyMask = io.imread(catalogNameMask + "/" + fileNameMask)
-    emptyMask = cv2.cvtColor(emptyMask, cv2.COLOR_BGR2GRAY)
-    frangiImage = removeFrame(frangiImage, emptyMask)
-    plt.imsave(resultCatalog + "/" + str(example) + "_Frangi.png", frangiImage, cmap='gray')
-    plt.subplot(233)
-    io.imshow(frangiImage, cmap='gray')
+        image = io.imread(catalogName + "/" + fileName)
+        plt.imsave(resultCatalog + "/" + str(example) + "_Example.png", image)
 
-    expertImage = cv2.imread(catalogNameExpert + "/" + fileNameExpert)
-    expertImage = cv2.cvtColor(expertImage, cv2.COLOR_BGR2GRAY)
-    plt.imsave(resultCatalog + "/" + str(example) + "_ExpertImage.png", expertImage, cmap='gray')
-    plt.subplot(234)
-    io.imshow(expertImage)
-    compareMatrixes(expertImage, outputImage)
+        #green channel
+        originalImage = image[:, :, 1]
+        plt.imsave(resultCatalog + "/" + str(example) + "_Green.png", originalImage, cmap='gray')
 
-    #kNN
-    #learnImage = io.imread(catalogName + "/" + fileNameLearnKTT)
-    #learnImage = cv2.cvtColor(learnImage, cv2.COLOR_BGR2GRAY)
-    #learnImage = learnImage[300:700, 1100:1600]
+        #frangiFilter
+        frangiImage = filters.frangi(originalImage)
+        for y in range(frangiImage.shape[0]):
+            for x in range(frangiImage.shape[1]):
+                if frangiImage[y][x] > 0.0000002:
+                    frangiImage[y][x] = 255
+                else:
+                    frangiImage[y][x] = 0
+        outputImage = frangiImage
 
-    #learnImageExpert = cv2.imread(catalogNameExpert + "/" + fileNameLearnKTTExpert)
-    #learnImageExpert = cv2.cvtColor(learnImageExpert, cv2.COLOR_BGR2GRAY)
-    #learnImageExpert = learnImageExpert[300:700, 1100:1600]
+        #cut frame
+        emptyMask = io.imread(catalogNameMask + "/" + fileNameMask)
+        emptyMask = cv2.cvtColor(emptyMask, cv2.COLOR_BGR2GRAY)
+        frangiImage = removeFrame(frangiImage, emptyMask)
+        plt.imsave(resultCatalog + "/" + str(example) + "_Frangi.png", frangiImage, cmap='gray')
 
-    r = 5 // 2
-    divideParts = 5
-    #squareExpertImage = expertImage[r + (3 * (originalImage.shape[0] - r)) // divideParts : 4 * (originalImage.shape[0] - r) // divideParts,
-                        #r + 2 * (originalImage.shape[1] - r) // divideParts :  4 * (originalImage.shape[1] - r) // divideParts]
-    knnImage = knn(originalImage, expertImage)
-    plt.imsave(resultCatalog + "/" + str(example) + "_knnImage.png", knnImage, cmap='gray')
+        expertImage = cv2.imread(catalogNameExpert + "/" + fileNameExpert)
+        expertImage = cv2.cvtColor(expertImage, cv2.COLOR_BGR2GRAY)
+        plt.imsave(resultCatalog + "/" + str(example) + "_ExpertImage.png", expertImage, cmap='gray')
 
-    #knnImage = knnImage[r + (3 * (ori ginalImage.shape[0] - r)) // divideParts : 4 * (originalImage.shape[0] - r) // divideParts,
-                        #r + 2 * (originalImage.shape[1] - r) // divideParts :  4 * (originalImage.shape[1] - r) // divideParts]
-    #print(squareExpertImage.shape, knnImage.shape)
+        print("Frangi:")
+        compareMatrixes(expertImage, outputImage)
 
-    knnImageAfterErosion = morphology.erosion(knnImage)
-    plt.imsave(resultCatalog + "/" + str(example) + "_knnImageAfterErosion.png", knnImageAfterErosion, cmap='gray')
-    compareMatrixes(expertImage, knnImageAfterErosion)
+        r = 5 // 2
+        divideParts = 5
+        #squareExpertImage = expertImage[r + (3 * (originalImage.shape[0] - r)) // divideParts : 4 * (originalImage.shape[0] - r) // divideParts,
+                            #r + 2 * (originalImage.shape[1] - r) // divideParts :  4 * (originalImage.shape[1] - r) // divideParts]
+        knnImage = knn(originalImage, expertImage, X, Y)
+        plt.imsave(resultCatalog + "/" + str(example) + "_knnImage.png", knnImage, cmap='gray')
 
-    plt.show()
+        #knnImage = knnImage[r + (3 * (ori ginalImage.shape[0] - r)) // divideParts : 4 * (originalImage.shape[0] - r) // divideParts,
+                            #r + 2 * (originalImage.shape[1] - r) // divideParts :  4 * (originalImage.shape[1] - r) // divideParts]
+        #print(squareExpertImage.shape, knnImage.shape)
+
+        knnImageAfterErosion = morphology.erosion(knnImage)
+        plt.imsave(resultCatalog + "/" + str(example) + "_knnImageAfterErosion.png", knnImageAfterErosion, cmap='gray')
+        print("kNN:")
+        compareMatrixes(expertImage, knnImageAfterErosion)
 
 if __name__ == '__main__':
     main()
