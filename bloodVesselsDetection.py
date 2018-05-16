@@ -95,29 +95,33 @@ def knn(originalImage, expertImage, X, Y):
     classifier = KNeighborsClassifier(n_neighbors=5)
     classifier.fit(X, Y)
     r = 5 // 2
-    divideParts = 5
-    #for y in range(r + (2 *(originalImage.shape[0] - r)) // divideParts, 3 * (originalImage.shape[0] - r) // divideParts):
+
     for y in range(r , originalImage.shape[0] - r):
-    #    for x in range(r + 2 * (originalImage.shape[1] - r) // divideParts, 4 * (originalImage.shape[1] - r) // divideParts):
         for x in range(r, originalImage.shape[1] - r):
             square = originalImage[y - r: y + r + 1, x - r : x + r + 1]
             avg = np.average(square)
             median = np.median(square)
             variance = np.var(square)
             originalOutput[y][x] = classifier.predict([[avg, median, variance]])
-        if (y % 500 == 0):
+        if (y % 100 == 0):
             print(y, "/",  (originalImage.shape[0] - r))
     return originalOutput
 
-def main():
-    exampleTab = [6, 7, 9, 10]
-    learnKTT = 8
+def createName(number):
+    if number < 10:
+        return "0" + str(number)
+    else:
+        return str(number)
 
+def main():
+    exampleTab = [4, 6, 7, 10, 12]
+    learnKTT = 8
+    learnKTTName = createName(learnKTT)
     catalogName = "healthy"
     catalogNameMask = "healthy_fovmask"
     catalogNameExpert = "healthy_manualsegm"
-    learnFileName =  "0" + str(learnKTT) + "_h.jpg"
-    learnFileNameExpert = "0" + str(learnKTT) + "_h.tif"
+    learnFileName = learnKTTName + "_h.jpg"
+    learnFileNameExpert = learnKTTName + "_h.tif"
 
     learnImage = io.imread(catalogName + "/" + learnFileName)
     learnImage = cv2.cvtColor(learnImage, cv2.COLOR_BGR2GRAY)
@@ -128,19 +132,20 @@ def main():
     X, Y = createDataset(learnImage, learnExpert, 5)
 
     for example in exampleTab:
+        exampleName = createName(example)
         print(example, ":")
-        fileName = "0" + str(example) + "_h.jpg"
-        fileNameMask = "0" + str(example) + "_h_mask.tif"
-        fileNameExpert = "0" + str(example) + "_h.tif"
+        fileName = exampleName + "_h.jpg"
+        fileNameMask = exampleName + "_h_mask.tif"
+        fileNameExpert = exampleName + "_h.tif"
 
-        resultCatalog = "outputLAST"
+        resultCatalog = "output"
 
         image = io.imread(catalogName + "/" + fileName)
-        plt.imsave(resultCatalog + "/" + str(example) + "_Example.png", image)
+        plt.imsave(resultCatalog + "/" + exampleName + "_Example.png", image)
 
         #green channel
         originalImage = image[:, :, 1]
-        plt.imsave(resultCatalog + "/" + str(example) + "_Green.png", originalImage, cmap='gray')
+        plt.imsave(resultCatalog + "/" + exampleName + "_Green.png", originalImage, cmap='gray')
 
         #frangiFilter
         frangiImage = filters.frangi(originalImage)
@@ -156,28 +161,28 @@ def main():
         emptyMask = io.imread(catalogNameMask + "/" + fileNameMask)
         emptyMask = cv2.cvtColor(emptyMask, cv2.COLOR_BGR2GRAY)
         frangiImage = removeFrame(frangiImage, emptyMask)
-        plt.imsave(resultCatalog + "/" + str(example) + "_Frangi.png", frangiImage, cmap='gray')
+        plt.imsave(resultCatalog + "/" + exampleName + "_Frangi.png", frangiImage, cmap='gray')
 
         expertImage = cv2.imread(catalogNameExpert + "/" + fileNameExpert)
         expertImage = cv2.cvtColor(expertImage, cv2.COLOR_BGR2GRAY)
-        plt.imsave(resultCatalog + "/" + str(example) + "_ExpertImage.png", expertImage, cmap='gray')
+        plt.imsave(resultCatalog + "/" + exampleName + "_ExpertImage.png", expertImage, cmap='gray')
 
         print("Frangi:")
         compareMatrixes(expertImage, outputImage)
 
+        ################################################
+
+        #the whole photo processing, so not in using
         r = 5 // 2
         divideParts = 5
-        #squareExpertImage = expertImage[r + (3 * (originalImage.shape[0] - r)) // divideParts : 4 * (originalImage.shape[0] - r) // divideParts,
-                            #r + 2 * (originalImage.shape[1] - r) // divideParts :  4 * (originalImage.shape[1] - r) // divideParts]
+
+        #kNN
         knnImage = knn(originalImage, expertImage, X, Y)
-        plt.imsave(resultCatalog + "/" + str(example) + "_knnImage.png", knnImage, cmap='gray')
+        plt.imsave(resultCatalog + "/" + exampleName + "_knnImage.png", knnImage, cmap='gray')
 
-        #knnImage = knnImage[r + (3 * (ori ginalImage.shape[0] - r)) // divideParts : 4 * (originalImage.shape[0] - r) // divideParts,
-                            #r + 2 * (originalImage.shape[1] - r) // divideParts :  4 * (originalImage.shape[1] - r) // divideParts]
-        #print(squareExpertImage.shape, knnImage.shape)
-
+        #kNN with Erosion
         knnImageAfterErosion = morphology.erosion(knnImage)
-        plt.imsave(resultCatalog + "/" + str(example) + "_knnImageAfterErosion.png", knnImageAfterErosion, cmap='gray')
+        plt.imsave(resultCatalog + "/" + exampleName + "_knnImageAfterErosion.png", knnImageAfterErosion, cmap='gray')
         print("kNN:")
         compareMatrixes(expertImage, knnImageAfterErosion)
 
